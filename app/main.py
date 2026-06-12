@@ -41,6 +41,7 @@ class ChatResponse(BaseModel):
     agent_used: str
     tools_called: list[dict]
     mode: str
+    revisions: int = 0  # veces que el nodo critico devolvio la respuesta
 
 
 @app.post("/chat", response_model=ChatResponse)
