@@ -96,6 +96,30 @@ determinístico (la DB, el playbook, la API). El **eval** mide la calidad de
 las decisiones del sistema agéntico (¿ruteó bien? ¿usó la tool correcta?) —
 eso puede degradarse al cambiar de modelo o prompt sin que ningún test falle.
 
+## Parada 6 — La interfaz de chat (5 min)
+
+```powershell
+streamlit run ui/app.py
+# se abre solo en el navegador: http://localhost:8501
+```
+
+Hacé una consulta y fijate: el badge te dice qué agente atendió y en qué modo,
+y el desplegable "tools usadas" es la traza del loop — lo mismo que veías en
+la terminal, pero visual. El código (`ui/app.py`) es corto: una UI es solo
+otra puerta de entrada al mismo `ask()` del grafo.
+
+## Parada 7 — El nodo crítico (reflection) (5 min)
+
+Desde la v2 el grafo tiene un ciclo: cada respuesta pasa por un revisor
+(`app/agents/critic.py`) que la chequea contra una rúbrica; si no cumple,
+vuelve al agente con feedback (máximo 1 vez). En la UI, si una respuesta fue
+corregida vas a ver el badge "🔁 corregida por el crítico". Compará el grafo
+nuevo con el viejo:
+
+```powershell
+python -c "from app.agents.graph import get_graph; print(get_graph().get_graph().draw_ascii())"
+```
+
 ## Orden sugerido para LEER el código (de fácil a difícil)
 
 1. `app/db.py` — consultas SQL simples, sin IA
@@ -117,3 +141,6 @@ eso puede degradarse al cambiar de modelo o prompt sin que ningún test falle.
 - **RAG**: buscar fragmentos relevantes y dárselos al LLM para que responda citando fuentes.
 - **RRF**: suma de posiciones en varios rankings para fusionarlos en uno.
 - **Guardrail**: límite impuesto por código que el LLM no puede violar (ej: `MAX_ITERATIONS`, escalamiento por valor).
+- **Reflection**: un LLM call que revisa la respuesta de otro antes de entregarla, y puede devolverla con feedback (`app/agents/critic.py`).
+- **Human-in-the-loop**: pausar el flujo automático para que un humano apruebe antes de seguir (próximo paso del roadmap; el playbook ya escala a humano, pero fuera del grafo).
+- **Ciclo (en el grafo)**: una flecha que vuelve a un nodo anterior — lo que diferencia un grafo de una cadena.

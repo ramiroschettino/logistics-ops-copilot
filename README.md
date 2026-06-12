@@ -13,7 +13,7 @@ normativa aduanera con **RAG**. Expuesto como **microservicio FastAPI** y como
 ## Arquitectura
 
 ```
-   Usuario / Claude Desktop (MCP) / curl
+   UI chat (Streamlit) / Claude Desktop (MCP) / curl
                   │
                   ▼
    ┌─────────────────────────────────┐
@@ -22,17 +22,24 @@ normativa aduanera con **RAG**. Expuesto como **microservicio FastAPI** y como
    └───────────────┬─────────────────┘
                    ▼
    ┌─────────────────────────────────┐
-   │   Router Agent  (LangGraph)     │   ← clasifica y deriva
+   │   Router  (LangGraph)           │   ← clasifica y deriva
    └───┬───────────┬───────────┬─────┘
        ▼           ▼           ▼
   ┌─────────┐ ┌──────────┐ ┌─────────┐
   │Tracking │ │Exceptions│ │ Customs │   ← agentes especialistas
   │ Agent   │ │  Agent   │ │  (RAG)  │      con tool-calling loop
   └────┬────┘ └────┬─────┘ └────┬────┘
-       ▼           ▼            ▼
-   SQLite      playbook +    BM25 sobre
-   (envíos)    decisión      docs/ (normativa
-               por enum      aduanera, SLAs)
+       │           │            │
+   SQLite      playbook +    búsqueda híbrida
+   (envíos)    decisión      BM25 + embeddings
+               por enum      (fusión RRF)
+       └───────────┼────────────┘
+                   ▼
+   ┌─────────────────────────────────┐
+   │  Critic (reflection)            │   ← revisa contra rúbrica;
+   │  APROBADA → fin                 │     si no cumple, devuelve al
+   │  REVISAR → vuelve al agente ↺   │     agente con feedback (máx 1)
+   └─────────────────────────────────┘
                    │
                    ▼
         Groq API (Llama 3.3 70B)  ó  DEMO_MODE (offline)
@@ -46,9 +53,16 @@ normativa aduanera con **RAG**. Expuesto como **microservicio FastAPI** y como
   retry_delivery | mark_lost | escalate`) implementado en código, no en el prompt.
   El LLM decide *cuándo* invocarla; el código garantiza *qué* hace. Decisiones
   auditables, regla de escalamiento por valor (> USD 200 → humano) inviolable.
-- **RAG con BM25** (puro Python) en vez de embeddings densos: corre en cualquier
-  máquina sin GPU, sin descargar modelos. Chunking por sección de markdown, citas
-  de fuente en cada respuesta. (Upgrade natural: híbrido BM25 + denso con reranker.)
+- **RAG híbrido** (`app/rag.py`): BM25 (léxico, imbatible con tracking numbers y
+  códigos) + embeddings de Gemini (semántico, free tier, con caché en disco),
+  fusionados con Reciprocal Rank Fusion. Sin GEMINI_API_KEY degrada solo a BM25
+  (graceful degradation). Chunking por sección de markdown, citas de fuente.
+- **Datos críticos viajan por código, no por el LLM**: `decide_action` recibe solo
+  el tracking y lee el valor declarado de la DB. Motivo: en una corrida real el
+  modelo pasó un valor inventado que podía saltear el guardrail de escalamiento.
+- **Nodo crítico (reflection)**: un LLM call revisa cada respuesta contra una
+  rúbrica antes de entregarla; si no cumple, vuelve al agente con feedback (máx
+  1 ciclo). Veredicto por prefijo de texto plano — sin parseo JSON frágil.
 - **Cliente LLM agnóstico al proveedor** (`app/llm.py`): cambiar Groq por
   Anthropic/OpenAI/vLLM toca un solo archivo.
 - **`DEMO_MODE`**: sin API key, las tools corren igual (DB + RAG reales) y el
@@ -83,6 +97,15 @@ Respuesta (nota la **transparencia agéntica**: qué agente atendió y qué tool
 
 Endpoints sin LLM (integración directa): `GET /shipments/{tracking}`,
 `GET /exceptions` (triage batch de toda la operación), `GET /health`.
+
+## UI de chat
+
+```bash
+streamlit run ui/app.py    # http://localhost:8501
+```
+
+Chat con métricas de la operación en vivo, badge del agente que atendió cada
+respuesta y traza expandible de tools usadas (transparencia agéntica, visual).
 
 ## Servidor MCP
 
@@ -135,8 +158,11 @@ docker compose up --build       # imagen python:3.12-slim con healthcheck
 
 ## Next steps (roadmap)
 
-- Retrieval híbrido (BM25 + embeddings) con reranking y eval de retrieval (recall@k).
+- ~~Retrieval híbrido (BM25 + embeddings)~~ ✅ hecho (`app/rag.py` + `eval/compare_retrieval.py`)
+- ~~UI de chat~~ ✅ hecho (`ui/app.py`)
+- ~~Reflection / control de calidad~~ ✅ hecho (`app/agents/critic.py`)
+- Reranking con cross-encoder y eval de retrieval (recall@k).
 - Observabilidad de agentes: trazas con Langfuse/OpenTelemetry, costo por consulta.
-- Memoria de conversación multi-turno (checkpointer de LangGraph).
+- Memoria de conversación multi-turno + human-in-the-loop (checkpointer de LangGraph).
 - Agente proactivo programado (cron) que corre el triage y notifica por Slack/email.
 - Deploy real: Cloud Run / ECS con secretos gestionados y autoscaling.
