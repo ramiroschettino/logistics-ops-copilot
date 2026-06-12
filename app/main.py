@@ -62,10 +62,9 @@ def list_exceptions(min_days_stuck: int = 4, limit: int = 10) -> dict:
     stuck = db.find_stuck_shipments(min_days_stuck, limit)
     triage = []
     for s in stuck:
-        diag = tools.classify_exception(s["tracking_number"])
-        decision = tools.decide_action(diag.get("exception") or "other",
-                                       diag.get("declared_value_usd", 0))
-        triage.append({**s, "diagnosis": diag.get("exception"), "decision": decision})
+        d = tools.decide_action(s["tracking_number"])
+        triage.append({**s, "diagnosis": d.get("exception"),
+                       "decision": {"action": d.get("action"), "rationale": d.get("rationale")}})
     return {"count": len(triage), "shipments": triage}
 
 

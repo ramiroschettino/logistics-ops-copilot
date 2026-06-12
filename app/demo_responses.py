@@ -70,10 +70,8 @@ def demo_exceptions(message: str) -> tuple[str, list[dict]]:
         if not diag.get("exception"):
             lines.append(f"- {tn}: {diag['diagnosis']}")
             continue
-        decision = tools.decide_action(diag["exception"], diag.get("declared_value_usd", 0))
-        called.append({"tool": "decide_action",
-                       "args": {"exception_type": diag["exception"],
-                                "declared_value_usd": diag.get("declared_value_usd", 0)}})
+        decision = tools.decide_action(tn)
+        called.append({"tool": "decide_action", "args": {"tracking_number": tn}})
         lines.append(
             f"- {tn} ({diag['destination_country']}, USD {diag['declared_value_usd']}): "
             f"{diag['exception']} hace {diag['days_stuck']} dias -> ACCION: {decision['action']}\n"

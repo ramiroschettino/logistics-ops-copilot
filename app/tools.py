@@ -74,8 +74,8 @@ ACTIONS = {
 }
 
 
-def decide_action(exception_type: str, declared_value_usd: float = 0) -> dict:
-    """Decide la accion operativa para una excepcion segun el playbook."""
+def _action_for(exception_type: str, declared_value_usd: float) -> dict:
+    """Logica pura del playbook (deterministica, testeable)."""
     if exception_type not in ACTIONS:
         return {"action": "escalate", "rationale": "Excepcion fuera del playbook: requiere supervisor humano."}
     action, rationale = ACTIONS[exception_type]
@@ -85,6 +85,23 @@ def decide_action(exception_type: str, declared_value_usd: float = 0) -> dict:
                 "rationale": f"Valor declarado USD {declared_value_usd} > 200: escalamiento obligatorio. "
                              f"Accion sugerida al supervisor: {action} ({rationale})"}
     return {"action": action, "rationale": rationale}
+
+
+def decide_action(tracking_number: str) -> dict:
+    """Diagnostica el envio y decide la accion operativa segun el playbook.
+
+    Recibe SOLO el tracking: la excepcion y el valor declarado se leen de la
+    base, nunca de argumentos del LLM. Motivo (bug real observado): el modelo
+    paso un valor inventado (100 en vez de 26.33), lo que podria saltear el
+    guardrail de escalamiento por alto valor. Datos criticos viajan por
+    codigo, no por la "memoria" del modelo."""
+    diag = classify_exception(tracking_number)
+    if "error" in diag:
+        return diag
+    if not diag.get("exception"):
+        return {"tracking_number": diag["tracking_number"], "action": None,
+                "rationale": diag["diagnosis"]}
+    return {**diag, **_action_for(diag["exception"], diag.get("declared_value_usd", 0))}
 
 
 def search_docs(query: str, k: int = 3) -> dict:
@@ -147,14 +164,11 @@ TOOL_SCHEMAS = {
         "type": "function",
         "function": {
             "name": "decide_action",
-            "description": "Decide la accion operativa para una excepcion segun el playbook: request_docs, notify_buyer, retry_delivery, mark_lost o escalate.",
+            "description": "Diagnostica un envio y decide la accion operativa segun el playbook: request_docs, notify_buyer, retry_delivery, mark_lost o escalate. El valor declarado y la excepcion se leen de la base automaticamente.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "exception_type": {"type": "string", "enum": list(ACTIONS) + ["other"]},
-                    "declared_value_usd": {"type": "number", "description": "Valor declarado del envio en USD"},
-                },
-                "required": ["exception_type"],
+                "properties": {"tracking_number": {"type": "string", "description": "Numero de tracking, ej: MA-2026-00042"}},
+                "required": ["tracking_number"],
             },
         },
     },

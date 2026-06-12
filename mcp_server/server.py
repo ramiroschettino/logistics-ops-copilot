@@ -41,11 +41,7 @@ def list_stuck_shipments(min_days_stuck: int = 4, limit: int = 10) -> dict:
 @mcp.tool()
 def triage_shipment(tracking_number: str) -> dict:
     """Diagnostica la excepcion de un envio y decide la accion operativa segun el playbook."""
-    diag = tools.classify_exception(tracking_number)
-    if "error" in diag or not diag.get("exception"):
-        return diag
-    decision = tools.decide_action(diag["exception"], diag.get("declared_value_usd", 0))
-    return {**diag, "decision": decision}
+    return tools.decide_action(tracking_number)
 
 
 @mcp.tool()
