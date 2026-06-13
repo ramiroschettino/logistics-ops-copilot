@@ -47,5 +47,17 @@ def test_run_tool_dispatch():
     assert "results" in result
 
 
+def test_search_docs_schema_hides_k():
+    """Bug real: el LLM mando k='1' (string) y Groq rechazo la llamada.
+    `k` ya no se expone al modelo; el schema solo declara `query`."""
+    props = tools.TOOL_SCHEMAS["search_docs"]["function"]["parameters"]["properties"]
+    assert set(props) == {"query"}
+
+
+def test_search_docs_coerces_string_k():
+    """Defensa: si algun cliente pasa k como string, se coerciona en vez de romper."""
+    assert "results" in tools.search_docs("sla brasil", k="1")
+
+
 def test_run_tool_invalid_args():
     assert "error" in tools.run_tool("get_shipment", {"bad_arg": 1})

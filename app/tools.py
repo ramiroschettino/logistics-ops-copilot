@@ -105,7 +105,15 @@ def decide_action(tracking_number: str) -> dict:
 
 
 def search_docs(query: str, k: int = 3) -> dict:
-    """Busca en la base de conocimiento (normativa aduanera, SLAs, playbook)."""
+    """Busca en la base de conocimiento (normativa aduanera, SLAs, playbook).
+
+    `k` queda fijo en codigo (no lo decide el LLM): cuantos fragmentos traer es
+    una constante de retrieval, no una decision del modelo. Se coerciona por si
+    algun cliente lo pasa como string."""
+    try:
+        k = int(k)
+    except (TypeError, ValueError):
+        k = 3
     results = get_index().search(query, k)
     return {"results": results}
 
@@ -180,8 +188,7 @@ TOOL_SCHEMAS = {
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
-                    "k": {"type": "integer", "description": "Cantidad de fragmentos (default 3)"},
+                    "query": {"type": "string", "description": "Consulta en lenguaje natural"},
                 },
                 "required": ["query"],
             },
